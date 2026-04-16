@@ -1,0 +1,19 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="../AuthServer/AuthServer.vcxproj" Id="54839fef-f988-4056-9512-513a3d7d7b6c" />
+  <Project Path="../ChatServer/ChatServer.vcxproj" Id="da1e314e-c404-4cb7-8224-f1587e14a762">
+    <Build Solution="Release|x64" Project="false" />
+  </Project>
+  <Project Path="../GameServer/GameServer.vcxproj" Id="34fb5143-be5c-4a91-a67e-f0f971882048">
+    <Build Solution="Release|x64" Project="false" />
+  </Project>
+  <Project Path="../LobbyServer/LobbyServer.vcxproj" Id="f109b947-d7dd-434b-b35e-a4ccbbd68b97">
+    <Build Solution="Release|x64" Project="false" />
+  </Project>
+  <Project Path="NetCore.vcxproj" Id="90cc722d-d7d1-4a53-8400-591ab2d961de">
+    <Build Solution="Release|x64" Project="false" />
+  </Project>
+</Solution>
