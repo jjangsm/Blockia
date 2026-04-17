@@ -2,6 +2,7 @@
 #include "pch.h"
 
 using namespace std;
+using namespace chrono;
 
 
 class ScopeLock
@@ -139,5 +140,11 @@ public:
 		memcpy(dest + first, &buf[0], len - first);
 
 		return true;
+	}
+	size_t Size() const
+	{
+		size_t h = head.value.load(memory_order_relaxed);
+		size_t t = tail.value.load(memory_order_acquire);
+		return t - h;
 	}
 };

@@ -1,6 +1,9 @@
 #pragma once
 #include "common.h"
+#include "Debug.h"
 #include <Common.pb.h>
+
+constexpr auto MAX_BUF =  8192;
 
 using namespace Protocol;
 
@@ -11,21 +14,27 @@ enum class IOType : uint8_t
 	WRITING
 };
 
+#pragma pack(push, 1)
+struct PacketHeader
+{
+	uint16_t size;
+	uint32_t header;
+};
+#pragma pack(pop)
+
 class Job
 {
 private:
-	vector<char> data;
-	uint16_t header = 0;
+	vector<char> data{};
+	uint32_t header = 0;
 public:
-	explicit Job(uint16_t h, vector<char>&& d)
-		: header(h), data(move(d)) {}
-
-	explicit Job(PACKET_HEADER h, vector<char>&& d)
-		: Job(static_cast<uint16_t>(h), move(d)) {}
+	Job() = default;
+	explicit Job(uint32_t h, vector<char>&& d)
+		: header(h), data(move(d)) { }
 
 	PACKET_HEADER GetHeader() const noexcept
 	{ return static_cast<PACKET_HEADER>(header); }
-	
+
 	const char* GetData() const noexcept { return data.data(); }
 	size_t GetSize() const noexcept { return data.size(); }
 };
@@ -53,28 +62,38 @@ public:
 	}
 };
 
-struct OverlappedEx
+typedef struct OverlappedEx
 {
-	OVERLAPPED overlapped;
-	char buf[4096];
-	IOType ioType;
+	OVERLAPPED overlapped{};
+	char buf[MAX_BUF]{};
+	IOType ioType = IOType::READING;
+} OVERLAPPED_EX;
+
+struct AcceptContext
+{
+	OVERLAPPED_EX overlapped;
+	SOCKET sock;
+	char buf[1024];
 };
-using OVERLAPPED_EX = OverlappedEx;
+
+struct RecvContext
+{
+	OVERLAPPED_EX overlapped;
+	WSABUF buf;
+};
 
 struct alignas(64) Session
 {
 	DWORD64				sessionID		= 0;
 	SOCKET				sock			= INVALID_SOCKET;
-	SOCKADDR_IN			sockAdr			= { 0 };
+	SOCKADDR_IN			sockAdr			= { };
 	DWORD				sockAdrIP		= 0;
 	USHORT				sockAdrPort		= 0;
 
 	DWORD				timeoutTime		= 0;
 
-	OVERLAPPED_EX		overlappedEx	= { 0 };
-
-	RingBuffer			recvBuf;
-	RingBuffer			sendBuf;
+	RingBuffer			recvBuf{ MAX_BUF };
+	RingBuffer			sendBuf{ MAX_BUF };
 
 	JobQueue			jobQueue;
 
@@ -85,10 +104,7 @@ struct alignas(64) Session
 	alignas(64) DWORD	ioCount			= 0x80000000;
 	alignas(64) DWORD	ioFlag			= 0;
 
-	Session() :sessionID(0), sock(INVALID_SOCKET), sockAdr{ 0 },
-		sockAdrIP(0), sockAdrPort(0), timeoutTime(0), recvBuf{ 0 },
-		sendBuf{ 0 },jobQueue{}, alive(false)
-	{ InitializeSRWLock(&sl); }
+	Session() { InitializeSRWLock(&sl); }
 };
 
 class SessionManager
@@ -128,24 +144,17 @@ public:
 	}
 };
 
-struct AcceptContext
-{
-	OVERLAPPED_EX overlapped;
-	SOCKET sock;
-	char buf[64];
-};
-
-inline SessionManager sm{};
-
 class NetCore
 {
 	atomic<bool> isRunning = false;
+	SessionManager sm;
 
 	SOCKET listenSock;
 	SOCKADDR_IN listenAdr;
 
 	HANDLE hComPort;
 	LPFN_ACCEPTEX lpAcceptEx;
+	LPFN_GETACCEPTEXSOCKADDRS lpGetAcceptExSockaddrs;
 
 	CRITICAL_SECTION cs;
 	SRWLOCK sl;
@@ -156,9 +165,9 @@ private:
 	void PostAccept() const;
 	void OnAccept(AcceptContext* ctx);
 public:
-	void StartUp(USHORT port, int acceptCount);
+	void StartUp(string name, USHORT port, int acceptCount);
 	void PostRecv(Session* session);
-	virtual void Processing(Session* session, Job job);
+	void Parser(Session* session);
 
 	struct ThreadParam
 	{
@@ -168,4 +177,6 @@ public:
 	static unsigned __stdcall ThreadEntry(void* param);
 
 	unsigned __stdcall WorkerThread(HANDLE hComPort);
+protected:
+	virtual void Processing(JobQueue* jobQueue);
 };

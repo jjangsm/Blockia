@@ -9,18 +9,27 @@ void NetCore::LoadAcceptEx()
 	if (WSAIoctl(listenSock, SIO_GET_EXTENSION_FUNCTION_POINTER,
 		&guidAcceptEx, sizeof(guidAcceptEx),
 		&lpAcceptEx, sizeof(lpAcceptEx), &bytes, NULL, NULL)
-		== SOCKET_ERROR)
-	{
-		//logging
-	}
+		== SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
+
+		GUID guidGetAcceptExSockaddrs = WSAID_GETACCEPTEXSOCKADDRS;
+
+	if (WSAIoctl(listenSock, SIO_GET_EXTENSION_FUNCTION_POINTER,
+		&guidGetAcceptExSockaddrs, sizeof(guidGetAcceptExSockaddrs),
+		&lpGetAcceptExSockaddrs, sizeof(lpGetAcceptExSockaddrs),
+		&bytes, NULL, NULL) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
 }
 
 void NetCore::PostAccept() const
 {
 	AcceptContext* ctx = new AcceptContext();
+	ZeroMemory(ctx, sizeof(AcceptContext));
 
-	ctx->sock = WSASocket(AF_INET, SOCK_STREAM,
-		0, NULL, 0, WSA_FLAG_OVERLAPPED);
+	if ((ctx->sock = WSASocket(AF_INET, SOCK_STREAM,
+		0, NULL, 0, WSA_FLAG_OVERLAPPED)) == INVALID_SOCKET)
+	{
+		PRINT_LAST_WSA_EXCAPTION;
+		delete ctx;
+	}
 
 	ctx->overlapped.ioType = IOType::ACCEPT;
 
@@ -30,17 +39,34 @@ void NetCore::PostAccept() const
 		0, sizeof(SOCKADDR_IN) + 16, sizeof(SOCKADDR_IN) + 16,
 		&bytes, &ctx->overlapped.overlapped);
 
-	if (!ret)
-	{
-		//error logging
-	}
+	if (!ret) PRINT_LAST_WSA_EXCAPTION;
 }
 
 void NetCore::OnAccept(AcceptContext* ctx)
 {
 	int sockLen = sizeof(listenSock);
-	getsockopt(ctx->sock, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
-		(char*)&listenSock, &sockLen);
+	setsockopt(ctx->sock, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
+		(char*)&listenSock, sizeof(listenSock));
+
+	SOCKADDR_IN* localAdr = nullptr;
+	SOCKADDR_IN* remoteAdr = nullptr;
+	int localAdrLen = 0;
+	int remoteAdrLen = 0;
+
+	lpGetAcceptExSockaddrs(
+		ctx->buf,
+		0,
+		sizeof(SOCKADDR_IN) + 16,
+		sizeof(SOCKADDR_IN) + 16,
+		(SOCKADDR**)&localAdr,
+		&localAdrLen,
+		(SOCKADDR**)&remoteAdr,
+		&remoteAdrLen
+	);
+
+	char ipStr[INET_ADDRSTRLEN] = { 0 };
+
+	inet_ntop(AF_INET, &remoteAdr->sin_addr, ipStr, sizeof(ipStr));
 
 	Session* session = new Session();
 	session->sock = ctx->sock;
@@ -48,11 +74,11 @@ void NetCore::OnAccept(AcceptContext* ctx)
 	session->sessionID = sm.IssueSessionId();
 	sm.Emplace(session);
 
-	if (CreateIoCompletionPort((HANDLE)session->sock, hComPort, 
-		(ULONG_PTR)session, 0) == NULL)
-	{
-		//logging
-	}
+	auto str = "Client " + to_string(ctx->sock) + " is connected from " + ipStr + " | Session ID : " + to_string(session->sessionID);
+	LOG_INFO(str);
+
+	if (CreateIoCompletionPort((HANDLE)session->sock, hComPort,
+		(ULONG_PTR)session->sessionID, 0) == NULL) PRINT_LAST_WSA_EXCAPTION;
 
 	PostRecv(session);
 
@@ -61,8 +87,10 @@ void NetCore::OnAccept(AcceptContext* ctx)
 	delete ctx;
 }
 
-void NetCore::StartUp(USHORT port, int acceptCount)
+void NetCore::StartUp(string name, USHORT port, int acceptCount)
 {
+	Debug::PrintLogo(name);
+
 	isRunning = true;
 	InitializeCriticalSection(&cs);
 
@@ -73,58 +101,63 @@ void NetCore::StartUp(USHORT port, int acceptCount)
 
 	WSADATA wsaData;
 
-	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
-	{
-		//logging
-	}
-	if ((hComPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0)) == NULL)
-	{
-		//logging
-	}
-	if ((listenSock = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED)) == INVALID_SOCKET)
-	{
-		//logging
-	}
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) PRINT_LAST_WSA_EXCAPTION;
+	if ((hComPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0)) == NULL) PRINT_LAST_WSA_EXCAPTION;
+	if ((listenSock = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED)) == INVALID_SOCKET) PRINT_LAST_WSA_EXCAPTION;
 	CreateIoCompletionPort((HANDLE)listenSock, hComPort, (ULONG_PTR)0, 0);
 
 	memset(&listenAdr, 0, sizeof(listenAdr));
 
 	listenAdr.sin_family = AF_INET;
 	listenAdr.sin_addr.s_addr = htonl(INADDR_ANY);
-	listenAdr.sin_port = port;
+	listenAdr.sin_port = htons(port);
 
-	if (::bind(listenSock, (SOCKADDR*)&listenAdr, sizeof(listenAdr)) == SOCKET_ERROR)
-	{
-		//logging
-	}
+	if (::bind(listenSock, (SOCKADDR*)&listenAdr, sizeof(listenAdr)) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
 
-	if (listen(listenSock, 100) == SOCKET_ERROR)
-	{
-		//logging
-	}
+	if (listen(listenSock, 100) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
 
 	LoadAcceptEx();
 	for (int i = 0; i < acceptCount; i++) PostAccept();
 
 	for (int i = 0; i < threadSize; i++)
 	{
-		pool[i] = (HANDLE)_beginthreadex(NULL, 0, ThreadEntry, new ThreadParam{ this,hComPort }, 0, NULL);
+		pool[i] = (HANDLE)_beginthreadex(NULL, 0, ThreadEntry, new ThreadParam{ this, hComPort }, 0, NULL);
 	}
 
 }
 
 void NetCore::PostRecv(Session* session)
 {
-	WSABUF buf{};
-	buf.buf = session->overlappedEx.buf;
-	buf.len = sizeof(session->overlappedEx.buf);
+	RecvContext* ctx = new RecvContext();
+	ZeroMemory(ctx, sizeof(RecvContext));
+	
+	ctx->overlapped.ioType = IOType::READING;
 
-	session->overlappedEx.ioType = IOType::READING;
+	ctx->buf.buf = ctx->overlapped.buf;
+	ctx->buf.len = sizeof(ctx->overlapped.buf);
 
-	if (WSARecv(session->sock, &buf, 1, NULL,
-		&session->ioFlag, &session->overlappedEx.overlapped, NULL) == SOCKET_ERROR)
+	if (WSARecv(session->sock, &ctx->buf, 1, NULL,
+		&session->ioFlag, &ctx->overlapped.overlapped, NULL) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
+}
+
+void NetCore::Parser(Session* session)
+{
+	while (true)
 	{
-		//logging
+		if (session->recvBuf.Size() < sizeof(PacketHeader)) return;
+		PacketHeader header;
+
+		if (!session->recvBuf.Peek((char*)&header, sizeof(header))) return;
+
+		if (!session->recvBuf.Size() < header.size) return;
+
+		vector<char> data(header.size);
+
+		if (!session->recvBuf.TryPop(data.data(), header.size)) return;
+
+		Job job(header.header, move(data));
+
+		session->jobQueue.Pop(job);
 	}
 }
 
@@ -164,7 +197,7 @@ unsigned __stdcall NetCore::WorkerThread(HANDLE hComPort)
 			//shutdown
 			if (!completionKey)
 			{
-				//error logging
+				PRINT_LAST_WSA_EXCAPTION;
 			}
 			else
 			{
@@ -183,24 +216,40 @@ unsigned __stdcall NetCore::WorkerThread(HANDLE hComPort)
 
 		sessionID = completionKey;
 		session = sm.GetSession(sessionID);
+		if (!session) continue;
 
-		if (res && byteTrans)
+		if (res)
 		{
 			switch (overlappedEx->ioType)
 			{
 			case IOType::ACCEPT:
 			{
-				//test
-				cout << "connected";
+				AcceptContext* ctx = CONTAINING_RECORD(overlappedEx, AcceptContext, overlapped);
+				OnAccept(ctx);
 				break;
 			}
 			case IOType::READING:
 			{
+				RecvContext* ctx = CONTAINING_RECORD(overlappedEx, RecvContext, overlapped);
+				if (!ctx)
+				{
+					PRINT_LAST_WSA_EXCAPTION;
+					break;
+				}
+				if (!byteTrans)
+				{
+					//disconnect
+					break;
+				}
 
-				//test
-				vector<char> a;
-				Job job{ PKT_UNKNOWN,move(a) };
-				Processing(session, job);
+				session->recvBuf.TryPush(ctx->overlapped.buf, byteTrans);
+				Parser(session);
+
+				Processing(&session->jobQueue);
+
+				PostRecv(session);
+
+				delete ctx;
 				break;
 			}
 			case IOType::WRITING:
@@ -210,10 +259,12 @@ unsigned __stdcall NetCore::WorkerThread(HANDLE hComPort)
 			default: break;
 			}
 		}
-		if (!InterlockedDecrement(&session->ioCount))
+		if (session && !InterlockedDecrement(&session->ioCount))
 		{
 			//shutdown session
 		}
 	}
 	return 0;
 }
+
+void NetCore::Processing(JobQueue* jobQueue) {}

@@ -5,8 +5,10 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <iostream>
-#include <vector>
 #include <string>
+#include <sstream>
+#include <thread>
+#include <vector>
 #include <unordered_map>
 #include <queue>
 #include <memory>
@@ -17,6 +19,7 @@
 #include <WinSock2.h>
 #include <Windows.h>
 #include <MSWSock.h>
+#include <ws2tcpip.h>
 
 #include <json.hpp>
 

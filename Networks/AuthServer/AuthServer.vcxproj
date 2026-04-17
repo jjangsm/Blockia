@@ -72,7 +72,9 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ExternalIncludePath>D:\Develop\protobuf-3.11.0\src;D:\Develop\Git\Blockia\Networks\Common;$(ExternalIncludePath)</ExternalIncludePath>
+    <ExternalIncludePath>D:\Develop\protobuf-3.11.0\src;D:\Develop\Git\Blockia\Networks\Common;D:\Develop\curl-8.1.0\src;$(ExternalIncludePath)</ExternalIncludePath>
+    <IncludePath>C:\Program Files\MySQL\MySQL Server 8.0\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Program Files\OpenSSL-Win64\lib\VC\x64\MT;C:\Program Files\MySQL\MySQL Server 8.0\lib;D:\Develop\curl-8.1.0\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -124,18 +126,21 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>D:\Develop\Protobuf-Build\include;D:\Develop\Git\Blockia\Networks\NetCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Develop\Protobuf-Build\include;D:\Develop\Git\Blockia\Networks\NetCore;C:\Program Files\OpenSSL-Win64\include;D:\Develop\curl-8.1.0\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\Develop\Protobuf-Build\Release;D:\Develop\Git\Blockia\Networks\NetCore\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libprotobuf.lib;NetCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>D:\Develop\Protobuf-Build\Release;D:\Develop\Git\Blockia\Networks\NetCore\x64\Release;D:\Develop\curl-8.1.0\build\Win32\VC14.30\LIB Release - DLL Windows SSPI;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libprotobuf.lib;libmysql.lib;libcrypto.lib;libssl.lib;libcurl.lib;NetCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Network.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

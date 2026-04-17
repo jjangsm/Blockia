@@ -1,1 +1,1 @@
-protoc --cpp_out=. Common.proto
+protoc --cpp_out=. --csharp_out=../../Assets/Scripts/Network Common.proto
