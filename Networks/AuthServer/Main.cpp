@@ -1,10 +1,13 @@
 #include "Network.h"
+#include "TLS.h"
 
 int main()
 {
-	NetCore core;
+	NetCore* core = new GatewayServer();
 
-	core.StartUp("Gateway Server", 8080, 100);
+	TLS::InitTLS();
+
+	core->StartUp("Gateway Server", 8080, 100);
 
 	while (true)
 	{

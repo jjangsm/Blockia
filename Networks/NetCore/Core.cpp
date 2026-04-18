@@ -29,6 +29,7 @@ void NetCore::PostAccept() const
 	{
 		PRINT_LAST_WSA_EXCAPTION;
 		delete ctx;
+		return;
 	}
 
 	ctx->overlapped.ioType = IOType::ACCEPT;
@@ -87,7 +88,7 @@ void NetCore::OnAccept(AcceptContext* ctx)
 	delete ctx;
 }
 
-void NetCore::StartUp(string name, USHORT port, int acceptCount)
+void NetCore::StartUp(string name, USHORT port, int count)
 {
 	Debug::PrintLogo(name);
 
@@ -114,15 +115,14 @@ void NetCore::StartUp(string name, USHORT port, int acceptCount)
 
 	if (::bind(listenSock, (SOCKADDR*)&listenAdr, sizeof(listenAdr)) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
 
-	if (listen(listenSock, 100) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
+	acceptCount = count;
 
-	LoadAcceptEx();
-	for (int i = 0; i < acceptCount; i++) PostAccept();
+	if (listen(listenSock, acceptCount) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
+
+	RegistAccept();
 
 	for (int i = 0; i < threadSize; i++)
-	{
-		pool[i] = (HANDLE)_beginthreadex(NULL, 0, ThreadEntry, new ThreadParam{ this, hComPort }, 0, NULL);
-	}
+	{ pool[i] = (HANDLE)_beginthreadex(NULL, 0, ThreadEntry, new ThreadParam{ this, hComPort }, 0, NULL); }
 
 }
 
@@ -145,19 +145,19 @@ void NetCore::Parser(Session* session)
 	while (true)
 	{
 		if (session->recvBuf.Size() < sizeof(PacketHeader)) return;
+
 		PacketHeader header;
+		ZeroMemory(&header, sizeof(header));
 
-		if (!session->recvBuf.Peek((char*)&header, sizeof(header))) return;
+		if (!session->recvBuf.TryPop((char*)&header, sizeof(header))) return;
 
-		if (!session->recvBuf.Size() < header.size) return;
+		if (session->recvBuf.Size() < header.size - 6) return;
 
 		vector<char> data(header.size);
 
 		if (!session->recvBuf.TryPop(data.data(), header.size)) return;
 
-		Job job(header.header, move(data));
-
-		session->jobQueue.Pop(job);
+		session->jobQueue.Push(Job(header.header, move(data)));
 	}
 }
 
@@ -216,7 +216,6 @@ unsigned __stdcall NetCore::WorkerThread(HANDLE hComPort)
 
 		sessionID = completionKey;
 		session = sm.GetSession(sessionID);
-		if (!session) continue;
 
 		if (res)
 		{
@@ -230,6 +229,7 @@ unsigned __stdcall NetCore::WorkerThread(HANDLE hComPort)
 			}
 			case IOType::READING:
 			{
+				if (!session) continue;
 				RecvContext* ctx = CONTAINING_RECORD(overlappedEx, RecvContext, overlapped);
 				if (!ctx)
 				{
@@ -266,5 +266,11 @@ unsigned __stdcall NetCore::WorkerThread(HANDLE hComPort)
 	}
 	return 0;
 }
-
-void NetCore::Processing(JobQueue* jobQueue) {}
+void NetCore::RegistAccept()
+{
+	LoadAcceptEx();
+	for (int i = 0; i < acceptCount; i++) PostAccept();
+}
+void NetCore::ProcessAccept()
+{
+}

@@ -1007,7 +1007,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetCore
   ip: 127.0.0.1
   port: 8080
-  clientCount: 1000
+  clientCount: 1
   sendInterval: 0.01
   packetSize: 8192
   send: 1

@@ -21,6 +21,10 @@ using namespace Protocol;
 
 class GatewayServer : public NetCore
 {
+	void RegistAccept() override
+	{
+		NetCore::RegistAccept();
+	}
 	void Processing(JobQueue* jobQueue) override
 	{
 		Job job;
@@ -33,11 +37,14 @@ class GatewayServer : public NetCore
 
 			switch (job.GetHeader())
 			{
-			case PKT_UNKNOWN:
+			case PKT_REQ_LOGIN:
 			{
-				string str(data, job.GetSize());
+				LoginData login;
+				login.ParseFromString(data);
 
-				LOG_INFO(str);
+				LOG_INFO(login.id());
+				LOG_INFO(login.mail());
+				LOG_INFO(login.password());
 				break;
 			}
 			}

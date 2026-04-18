@@ -160,12 +160,14 @@ class NetCore
 	SRWLOCK sl;
 
 	vector<HANDLE> pool;
+
+	int acceptCount;
 private:
 	void LoadAcceptEx();
 	void PostAccept() const;
 	void OnAccept(AcceptContext* ctx);
 public:
-	void StartUp(string name, USHORT port, int acceptCount);
+	void StartUp(string name, USHORT port, int count = 100);
 	void PostRecv(Session* session);
 	void Parser(Session* session);
 
@@ -178,5 +180,7 @@ public:
 
 	unsigned __stdcall WorkerThread(HANDLE hComPort);
 protected:
-	virtual void Processing(JobQueue* jobQueue);
+	virtual void Processing(JobQueue* jobQueue) = 0;
+	virtual void RegistAccept();
+	virtual void ProcessAccept();
 };

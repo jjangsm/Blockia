@@ -50,8 +50,15 @@ public class NetCore : MonoBehaviour
     async UniTaskVoid SendLoop(Socket sock)
     {
         // 더미 패킷 생성
-        uint header = (uint)PACKET_HEADER.PktUnknown;
-        byte[] msg = Encoding.UTF8.GetBytes("Hello");
+        uint header = (uint)PACKET_HEADER.PktReqLogin;
+        LoginData data = new()
+        {
+            Id = "TEST1234",
+            Mail = "TestMail@gmail.com",
+            Password = "1234567890",
+        };
+
+        byte[] msg = data.ToByteArray();
         ushort size = (ushort)(6 + msg.Length);
         byte[] buffer = new byte[size];
 
