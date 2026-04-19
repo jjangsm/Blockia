@@ -4,17 +4,9 @@
 #include <Core.h>
 
 #include <mysql.h>
-
-#include <openssl/rsa.h>
-#include <openssl/ssl.h>
-#include <openssl/pem.h>
-#include <openssl/aes.h>
-#include <openssl/rand.h>
-#include <openssl/err.h>
-#include <openssl/bio.h>
-#include <openssl/buffer.h>
-
 #include <curl/curl.h>
+
+#include "TLS.h"
 
 using namespace std;
 using namespace Protocol;
@@ -22,22 +14,28 @@ using namespace Protocol;
 class GatewayServer : public NetCore
 {
 public:
-	void Processing(JobQueue* jobQueue) override
+	class TLSSession : public Session
 	{
-		Job job;
-		PACKET_HEADER header;
-		const char* data;
-		while (jobQueue->Pop(job))
-		{
-			header = job.GetHeader();
-			data = job.GetData();
+	public:
+		SSL* ssl = {};
+		BIO* rbio = {};
+		BIO* wbio = {};
+		bool handshakeDone = false;
+	};
 
-			switch (job.GetHeader())
+	void Processing(Session* session) override
+	{
+		while (!session->jobQueue.empty())
+		{
+			Job* job = session->jobQueue.front();
+			session->jobQueue.pop();
+
+			switch (job->header)
 			{
 			case PKT_REQ_LOGIN:
 			{
 				LoginData login;
-				login.ParseFromString(data);
+				login.ParseFromString(job->data.data());
 
 				LOG_INFO(login.id());
 				LOG_INFO(login.mail());
@@ -45,6 +43,7 @@ public:
 				break;
 			}
 			}
+			session->jobPool.Push(job);
 		}
 	}
 	void OnRecv(IOContext* ctx, int byteTrans)
@@ -62,7 +61,11 @@ public:
 		
 		TLSSession* session = static_cast<TLSSession*>(ctx->owner);
 
-		BIO_write(session->rbio, ctx->overlappedEx.buf, byteTrans);
+		LPIOCONTEXT cx = session->contextPool.Acquire();
+		cx->sock = session->sock;
+		cx->owner = session;
+
+		BIO_write(session->rbio, cx->overlappedEx.buf, byteTrans);
 
 		if (!session->handshakeDone)
 		{
@@ -73,12 +76,18 @@ public:
 
 			while (true)
 			{
-				int outLen = BIO_read(session->wbio, buf.data(), buf.size());
+				int outLen = BIO_read(session->wbio, buf.data(), MAX_BUF);
 				if (outLen < 0) break;
 
-				session->Push(static_cast<uint32_t>(PKT_HANDSHAKE), move(buf));
+				/*ZeroMemory(&session->sendCtx.overlappedEx.overlapped, sizeof(OVERLAPPED));
+				session->sendCtx.overlappedEx.ioType = IOType::WRITING;
+				session->sendCtx.overlappedEx.wsaBuf.buf = buf.data();
+				session->sendCtx.overlappedEx.wsaBuf.len = outLen;
 
-				PostSend(session);
+				session->sending = true;
+
+				WSASend(session->sock, &session->sendCtx.overlappedEx.wsaBuf, 1, NULL, 0,
+					&session->sendCtx.overlappedEx.overlapped, NULL);*/
 			}
 
 			if (ret == 1) session->handshakeDone = true;
@@ -107,41 +116,23 @@ public:
 			}
 			if (session->handshakeDone) PostRecv(session);
 		}
+		else
+		{
+			ctx->owner->recvBuf.TryPush(ctx->overlappedEx.buf, byteTrans);
+			Parser(ctx->owner);
+			Processing(&ctx->owner->jobPool);
+			PostRecv(session);
+		}
 
-	}
-	void OnSend(IOContext* ctx) override
-	{
-		SRWExclusiveLock lock(ctx->owner->sl);
-
-		if (ctx->owner->sending) return;
-
-		//need excaption
-
-		if (ctx->owner->sendBuf.Size() < sizeof(PacketHeader)) return;
-
-		PacketHeader header;
-		ZeroMemory(&header, sizeof(header));
-
-		if (!ctx->owner->sendBuf.TryPop((char*)&header, sizeof(header))) return;
-
-		if (ctx->owner->sendBuf.Size() < header.size - 6) return;
-
-		if (!ctx->owner->sendBuf.TryPop(ctx->owner->sendCtx.overlappedEx.buf, header.size)) return;
-
-		ZeroMemory(&ctx->owner->sendCtx.overlappedEx.overlapped, sizeof(OVERLAPPED));
-
-		ctx->owner->sendCtx.overlappedEx.wsaBuf.buf =
-			ctx->owner->sendCtx.overlappedEx.buf;
-		ctx->owner->sendCtx.overlappedEx.wsaBuf.len = header.size;
-
-		ctx->owner->sending = true;
-
-		WSASend(ctx->owner->sock, &ctx->owner->sendCtx.overlappedEx.wsaBuf, 1, NULL, 0,
-			&ctx->owner->sendCtx.overlappedEx.overlapped, NULL);
 	}
 	Session* CreateSession(SOCKET sock) override
 	{
 		TLSSession* session = new TLSSession();
+
+		session->sock = sock;
+		session->sessionID = sm.GenerateSessionId();
+		session->alive = true;
+
 		session->ssl = SSL_new(g_ctx);
 
 		session->rbio = BIO_new(BIO_s_mem());
@@ -149,15 +140,7 @@ public:
 
 		SSL_set_bio(session->ssl, session->rbio, session->wbio);
 		SSL_set_accept_state(session->ssl);
+
 		return session;
 	}
-};
-
-class TLSSession : public Session
-{
-public:
-	SSL* ssl = {};
-	BIO* rbio = {};
-	BIO* wbio = {};
-	bool handshakeDone = false;
 };

@@ -42,8 +42,8 @@ private:
 
 	struct alignas(64) CacheLineAtomic
 	{
-		atomic<size_t> value;
-		char padding[64 - sizeof(atomic<size_t>)];
+		atomic<size_t> value = 0;
+		char padding[64 - sizeof(atomic<size_t>)]{};
 	};
 
 	mutable CacheLineAtomic head;
@@ -146,5 +146,78 @@ public:
 		size_t h = head.value.load(memory_order_relaxed);
 		size_t t = tail.value.load(memory_order_acquire);
 		return t - h;
+	}
+};
+
+template<typename T>
+class LockFreePool
+{
+	struct Node
+	{
+		T* data;
+		Node* next;
+	};
+
+	struct TaggedPtr
+	{
+		Node* ptr;
+		uint64_t tag;
+	};
+
+	atomic<TaggedPtr> head;
+
+public:
+	LockFreePool()
+	{ head.store({ nullptr, 0 }, std::memory_order_relaxed); }
+
+	void Push(T* obj)
+	{
+		Node* node = new Node{ obj, nullptr };
+
+		TaggedPtr oldHead = head.load(std::memory_order_acquire);
+
+		while (true)
+		{
+			node->next = oldHead.ptr;
+
+			TaggedPtr newHead;
+			newHead.ptr = node;
+			newHead.tag = oldHead.tag + 1;
+
+			if (head.compare_exchange_weak(
+				oldHead,
+				newHead,
+				std::memory_order_release,
+				std::memory_order_acquire)) return;
+		}
+	}
+
+	T* Pop()
+	{
+		TaggedPtr oldHead = head.load(std::memory_order_acquire);
+
+		while (oldHead.ptr)
+		{
+			Node* next = oldHead.ptr->next;
+
+			TaggedPtr newHead;
+			newHead.ptr = next;
+			newHead.tag = oldHead.tag + 1;
+
+			if (head.compare_exchange_weak(
+				oldHead,
+				newHead,
+				std::memory_order_acq_rel,
+				std::memory_order_acquire))
+			{
+				T* result = oldHead.ptr->data;
+
+				delete oldHead.ptr;
+
+				return result;
+			}
+		}
+
+		return nullptr;
 	}
 };

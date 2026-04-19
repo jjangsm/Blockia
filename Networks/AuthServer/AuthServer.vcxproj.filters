@@ -18,10 +18,10 @@
     <ClCompile Include="Main.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="..\Common\Common.pb.cc">
+    <ClCompile Include="TLS.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="TLS.cpp">
+    <ClCompile Include="..\Common\Common.pb.cc">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

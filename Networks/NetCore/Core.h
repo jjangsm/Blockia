@@ -4,6 +4,8 @@
 #include <Common.pb.h>
 
 constexpr auto MAX_BUF =  4096;
+constexpr auto MAX_CONTEXT_POOL_SIZE = 8;
+constexpr auto MAX_JOB_POOL_SIZE = 16;
 
 using namespace Protocol;
 
@@ -19,67 +21,58 @@ struct PacketHeader
 {
 	uint16_t size = 0;
 	uint32_t header = 0;
-
-	PacketHeader() {}
-	PacketHeader(uint16_t s, uint32_t h) : size(s), header(h) {}
 };
 #pragma pack(pop)
 
 class Job
 {
-private:
+public:
 	vector<char> data{};
 	uint32_t header = 0;
 public:
 	Job() = default;
-	explicit Job(uint32_t h, vector<char>&& d)
-		: header(h), data(move(d)) { }
 
-	PACKET_HEADER GetHeader() const noexcept
-	{ return static_cast<PACKET_HEADER>(header); }
-
-	const char* GetData() const noexcept { return data.data(); }
-	size_t GetSize() const noexcept { return data.size(); }
-};
-
-class JobQueue
-{
-private:
-	queue<Job> q;
-	mutex mtx;
-public:
-	void Push(Job&& job)
-	{
-		lock_guard<mutex> lock(mtx);
-		q.push(move(job));
-	}
-
-	bool Pop(Job& out)
-	{
-		lock_guard<mutex> lock(mtx);
-		if (q.empty()) return false;
-
-		out = move(q.front());
-		q.pop();
-		return true;
-	}
+	size_t Size() const noexcept { return data.size(); }
 };
 
 typedef struct OverlappedEx
 {
 	OVERLAPPED overlapped{};
 	char buf[MAX_BUF]{};
-	WSABUF wsaBuf;
+	WSABUF wsaBuf{};
 	IOType ioType = IOType::READING;
-} OVERLAPPED_EX;
+} OVERLAPPED_EX, * LPOVERLAPPED_EX;
+
 
 class Session;
-struct IOContext
+
+typedef struct IOContext
 {
-	OVERLAPPED_EX overlappedEx;
-	SOCKET sock;
+	OVERLAPPED_EX overlappedEx{};
+	SOCKET sock = INVALID_SOCKET;
 	Session* owner = nullptr;
-};
+} IOCONTEXT, *LPIOCONTEXT;
+
+typedef class IOContextPool
+{
+private:
+	LockFreePool<IOCONTEXT> pool{};
+public:
+	IOContextPool(size_t size)
+	{ for (int i = 0; i < size; i++) pool.Push(new IOCONTEXT); }
+
+	LPIOCONTEXT Acquire()
+	{
+		if (LPIOCONTEXT obj = pool.Pop()) return obj;
+		else return new IOCONTEXT();
+	}
+
+	void Release(LPIOCONTEXT ctx)
+	{
+		ZeroMemory(&ctx, sizeof(IOCONTEXT));
+		pool.Push(ctx);
+	}
+} IOCONTEXT_POOL;
 
 class alignas(64) Session
 {
@@ -95,13 +88,10 @@ public:
 	RingBuffer			recvBuf{ MAX_BUF * 2 };
 	RingBuffer			sendBuf{ MAX_BUF * 2 };
 
-	atomic<bool>		sending = false;
-	atomic<bool>		recving = false;
+	IOCONTEXT_POOL		contextPool{ MAX_CONTEXT_POOL_SIZE };
 
-	IOContext			recvCtx{};
-	IOContext			sendCtx{};
-
-	JobQueue			jobQueue;
+	LockFreePool<Job>	jobPool;
+	queue<Job*>			jobQueue;
 
 	SRWLOCK				sl;
 
@@ -110,7 +100,11 @@ public:
 	alignas(64) DWORD	ioCount			= 0x80000000;
 	alignas(64) DWORD	ioFlag			= 0;
 
-	Session() { InitializeSRWLock(&sl); }
+	Session()
+	{ 
+		InitializeSRWLock(&sl);
+		for (int i = 0; i < MAX_JOB_POOL_SIZE; i++) jobPool.Push(new Job());
+	}
 	virtual ~Session() {};
 	void Push(uint32_t header, vector<char>&& data)
 	{
@@ -134,7 +128,7 @@ private:
 public:
 	SessionManager() : nextSessionId(sessionIdBase) {};
 
-	DWORD64 IssueSessionId()
+	DWORD64 GenerateSessionId()
 	{ return nextSessionId.fetch_add(1, memory_order_relaxed); }
 
 	void Emplace(Session* session)
@@ -158,6 +152,10 @@ public:
 		auto it = sessions.find(id);
 		if (it != sessions.end()) return it->second;
 	}
+	void CloseSession(DWORD64 id)
+	{
+		//close
+	}
 };
 
 class NetCore
@@ -179,7 +177,13 @@ public:
 	vector<HANDLE> pool{};
 
 	int acceptCount = 0;
-	NetCore() {}
+public:
+	NetCore()
+	{
+		InitializeSRWLock(&sl);
+		InitializeCriticalSection(&cs);
+	}
+
 	void StartUp(string name, USHORT port, int count = 100);
 	void PostRecv(Session* session) const;
 	void PostSend(Session* session) const;
@@ -194,16 +198,15 @@ public:
 
 	unsigned __stdcall WorkerThread(HANDLE hComPort);
 
-
 	virtual ~NetCore() {}
 private:
 	void LoadAcceptEx();
 	void PostAccept() const;
-	void OnAccept(IOContext* ctx);
+	void OnAccept(LPIOCONTEXT ctx);
 protected:
-	virtual void OnRecv(IOContext* ctx, int byteTrans);
-	virtual void OnSend(IOContext* ctx);
+	virtual void OnRecv(LPIOCONTEXT ctx, int byteTrans);
+	void OnSend(LPIOCONTEXT ctx);
 
-	virtual void Processing(JobQueue* jobQueue) = 0;
+	virtual void Processing(Session* session) = 0;
 	virtual Session* CreateSession(SOCKET sock);
 };

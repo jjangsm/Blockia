@@ -1,11 +1,14 @@
 using Cysharp.Threading.Tasks;
-using System;
-using System.Collections.Generic;
-using System.Net.Sockets;
-using System.Text;
-using UnityEngine;
 using Google.Protobuf;
 using Protocol;
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using UnityEngine;
 
 public class NetCore : MonoBehaviour
 {
@@ -87,9 +90,26 @@ public class NetCore : MonoBehaviour
         sock.Close();
     }
 
-    void Start()
+    async void Start()
     {
-        ConnectClientsAsync().Forget();
+        //ConnectClientsAsync().Forget();
+        await SslConnect();
+    }
+    private SslStream sslStream = null;
+    private async UniTask SslConnect()
+    {
+        TcpClient clnt = new(ip, port);
+        sslStream = new(clnt.GetStream(), false, ValidateServerCertificate);
+
+        await sslStream.AuthenticateAsClientAsync(ip);
+
+        Debug.Log("Handshake Completed");
+    }
+    private bool ValidateServerCertificate(object sender, X509Certificate certificate,
+        X509Chain chain, SslPolicyErrors sslPolicyErrors)
+    {
+        //임시 true
+        return true;
     }
 
     void OnApplicationQuit()

@@ -37,14 +37,14 @@ void NetCore::PostAccept() const
 
 	DWORD bytes = 0;
 
-	BOOL ret = lpAcceptEx(listenSock, ctx->owner->sock, ctx->overlappedEx.buf,
+	BOOL ret = lpAcceptEx(listenSock, ctx->sock, ctx->overlappedEx.buf,
 		0, sizeof(SOCKADDR_IN) + 16, sizeof(SOCKADDR_IN) + 16,
 		&bytes, &ctx->overlappedEx.overlapped);
 
 	if (!ret) PRINT_LAST_WSA_EXCAPTION;
 }
 
-void NetCore::OnAccept(IOContext* ctx)
+void NetCore::OnAccept(LPIOCONTEXT ctx)
 {
 	int sockLen = sizeof(listenSock);
 	setsockopt(ctx->sock, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
@@ -86,7 +86,7 @@ void NetCore::OnAccept(IOContext* ctx)
 	delete ctx;
 }
 
-void NetCore::OnRecv(IOContext* ctx, int byteTrans)
+void NetCore::OnRecv(LPIOCONTEXT ctx, int byteTrans)
 {
 	if (!ctx)
 	{
@@ -99,43 +99,53 @@ void NetCore::OnRecv(IOContext* ctx, int byteTrans)
 		return;
 	}
 
-	ctx->owner->recvBuf.TryPush(ctx->overlappedEx.buf, byteTrans);
-	Parser(ctx->owner);
+	Session* session = ctx->owner;
 
-	Processing(&ctx->owner->jobQueue);
+	LPIOCONTEXT cx = session->contextPool.Acquire();
+	cx->sock = session->sock;
+	cx->owner = session;
 
-	PostRecv(ctx->owner);
+	cx->owner->recvBuf.TryPush(ctx->overlappedEx.buf, byteTrans);
+	session->contextPool.Release(ctx);
+
+	Parser(cx->owner);
+
+	Processing(cx->owner);
+
+	PostRecv(cx->owner);
 }
 
-void NetCore::OnSend(IOContext* ctx)
+void NetCore::OnSend(LPIOCONTEXT ctx)
 {
 	SRWExclusiveLock lock(ctx->owner->sl);
+	
+	Session* session = ctx->owner;
 
-	if (ctx->owner->sending) return;
+	session->contextPool.Release(ctx);
 
-	//need excaption
+	LPIOCONTEXT cx = session->contextPool.Acquire();
+	cx->sock = session->sock;
+	cx->owner = session;
 
-	if (ctx->owner->sendBuf.Size() < sizeof(PacketHeader)) return;
+	if (cx->owner->sendBuf.Size() < sizeof(PacketHeader)) return;
 
 	PacketHeader header;
 	ZeroMemory(&header, sizeof(header));
 
-	if (!ctx->owner->sendBuf.Peek((char*)&header, sizeof(header))) return;
+	if (!cx->owner->sendBuf.Peek((char*)&header, sizeof(header))) return;
 
-	if (ctx->owner->sendBuf.Size() < header.size) return;
+	if (cx->owner->sendBuf.Size() < header.size) return;
 
-	if (!ctx->owner->sendBuf.TryPop(ctx->owner->sendCtx.overlappedEx.buf, header.size)) return;
+	if (!session->sendBuf.TryPop(cx->overlappedEx.buf, header.size)) return;
 
-	ZeroMemory(&ctx->owner->sendCtx.overlappedEx.overlapped, sizeof(OVERLAPPED));
+	ZeroMemory(&cx->overlappedEx.overlapped, sizeof(OVERLAPPED));
+	cx->overlappedEx.ioType = IOType::WRITING;
 
-	ctx->owner->sendCtx.overlappedEx.wsaBuf.buf =
-		ctx->owner->sendCtx.overlappedEx.buf;
-	ctx->owner->sendCtx.overlappedEx.wsaBuf.len = header.size;
+	cx->overlappedEx.wsaBuf.buf = cx->overlappedEx.buf;
+	cx->overlappedEx.wsaBuf.len = header.size;
 
-	ctx->owner->sending = true;
-
-	WSASend(ctx->owner->sock, &ctx->owner->sendCtx.overlappedEx.wsaBuf, 1, NULL, 0,
-		&ctx->owner->sendCtx.overlappedEx.overlapped, NULL);
+	if (WSASend(cx->sock, &cx->overlappedEx.wsaBuf, 1, NULL, 0,
+		&cx->overlappedEx.overlapped, NULL) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
 }
 
 void NetCore::StartUp(string name, USHORT port, int count)
@@ -178,46 +188,45 @@ void NetCore::StartUp(string name, USHORT port, int count)
 }
 
 void NetCore::PostRecv(Session* session) const
-{	
-	if (session->recving) return;
+{
+	LPIOCONTEXT cx = session->contextPool.Acquire();
 
-	session->recvCtx.sock = session->sock;
-	session->recvCtx.overlappedEx.ioType = IOType::READING;
-	ZeroMemory(&session->recvCtx.overlappedEx.overlapped, sizeof(OVERLAPPED));
+	cx->sock = session->sock;
+	cx->owner = session;
 
-	session->recvCtx.owner = session;
+	ZeroMemory(&cx->overlappedEx.overlapped, sizeof(OVERLAPPED));
+	cx->overlappedEx.ioType = IOType::READING;
 
-	session->recvCtx.overlappedEx.wsaBuf.buf = session->recvCtx.overlappedEx.buf;
-	session->recvCtx.overlappedEx.wsaBuf.len = sizeof(session->recvCtx.overlappedEx.buf);
+	cx->overlappedEx.wsaBuf.buf = cx->overlappedEx.buf;
+	cx->overlappedEx.wsaBuf.len = sizeof(cx->overlappedEx.buf);
 
-	session->recving = true;
-
-	if (WSARecv(session->recvCtx.sock, &session->recvCtx.overlappedEx.wsaBuf, 1, NULL,
-		&session->ioFlag, &session->recvCtx.overlappedEx.overlapped, NULL) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
+	if (WSARecv(cx->sock, &cx->overlappedEx.wsaBuf, 1, NULL,
+		&cx->owner->ioFlag, &cx->overlappedEx.overlapped, NULL) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
 }
 
 void NetCore::PostSend(Session* session) const
 {
 	SRWExclusiveLock lock(session->sl);
 
-	if (session->sending) return;
+	LPIOCONTEXT cx = session->contextPool.Acquire();
 
-	session->sendCtx.sock = session->sock;
-	session->sendCtx.overlappedEx.ioType = IOType::WRITING;
-	ZeroMemory(&session->sendCtx.overlappedEx.overlapped, sizeof(OVERLAPPED));
+	cx->sock = session->sock;
+	cx->owner = session;
 
-	session->sendCtx.owner = session;
+	cx->overlappedEx.ioType = IOType::WRITING;
+	ZeroMemory(&cx->overlappedEx.overlapped, sizeof(OVERLAPPED));
 
-	session->sending = true;
-
-	PostQueuedCompletionStatus(hComPort, 0, (ULONG_PTR)session,
-		&session->sendCtx.overlappedEx.overlapped);
+	if (PostQueuedCompletionStatus(hComPort, 0, (ULONG_PTR)cx->owner,
+		&cx->overlappedEx.overlapped) == SOCKET_ERROR) PRINT_LAST_EXCAPTION;
 }
 
 void NetCore::Parser(Session* session)
 {
 	while (true)
 	{
+		Job* job = session->jobPool.Pop();
+		ZeroMemory(job, sizeof(Job));
+
 		if (session->recvBuf.Size() < sizeof(PacketHeader)) return;
 
 		PacketHeader header;
@@ -231,7 +240,10 @@ void NetCore::Parser(Session* session)
 
 		if (!session->recvBuf.TryPop(data.data(), header.size)) return;
 
-		session->jobQueue.Push(Job(header.header, move(data)));
+		job->header = header.header;
+		job->data = move(data);
+
+		session->jobQueue.push(job);
 	}
 }
 
@@ -299,23 +311,21 @@ unsigned __stdcall NetCore::WorkerThread(HANDLE hComPort)
 			case IOType::ACCEPT: OnAccept(ctx); break;
 			case IOType::READING:
 			{
-				ctx->owner->recving = false;
 				OnRecv(ctx, byteTrans);
 				break;
 			}
 			case IOType::WRITING:
 			{
-				ctx->owner->sending = false;
 				OnSend(ctx);
 				break;
 			}
 			default: break;
 			}
 		}
-		if (session && !InterlockedDecrement(&session->ioCount))
-		{
-			//shutdown session
-		}
+		//if (session && !InterlockedDecrement(&session->ioCount))
+		//{
+		//	//shutdown session
+		//}
 	}
 	return 0;
 }
@@ -323,8 +333,10 @@ unsigned __stdcall NetCore::WorkerThread(HANDLE hComPort)
 Session* NetCore::CreateSession(SOCKET sock)
 {
 	Session* session = new Session();
+
 	session->sock = sock;
-	session->sessionID = sm.IssueSessionId();
+	session->sessionID = sm.GenerateSessionId();
 	session->alive = true;
+
 	return session;
 }
