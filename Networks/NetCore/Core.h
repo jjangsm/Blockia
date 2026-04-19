@@ -3,7 +3,7 @@
 #include "Debug.h"
 #include <Common.pb.h>
 
-constexpr auto MAX_BUF =  8192;
+constexpr auto MAX_BUF =  4096;
 
 using namespace Protocol;
 
@@ -17,8 +17,11 @@ enum class IOType : uint8_t
 #pragma pack(push, 1)
 struct PacketHeader
 {
-	uint16_t size;
-	uint32_t header;
+	uint16_t size = 0;
+	uint32_t header = 0;
+
+	PacketHeader() {}
+	PacketHeader(uint16_t s, uint32_t h) : size(s), header(h) {}
 };
 #pragma pack(pop)
 
@@ -66,24 +69,21 @@ typedef struct OverlappedEx
 {
 	OVERLAPPED overlapped{};
 	char buf[MAX_BUF]{};
+	WSABUF wsaBuf;
 	IOType ioType = IOType::READING;
 } OVERLAPPED_EX;
 
-struct AcceptContext
+class Session;
+struct IOContext
 {
-	OVERLAPPED_EX overlapped;
+	OVERLAPPED_EX overlappedEx;
 	SOCKET sock;
-	char buf[1024];
+	Session* owner = nullptr;
 };
 
-struct RecvContext
+class alignas(64) Session
 {
-	OVERLAPPED_EX overlapped;
-	WSABUF buf;
-};
-
-struct alignas(64) Session
-{
+public:
 	DWORD64				sessionID		= 0;
 	SOCKET				sock			= INVALID_SOCKET;
 	SOCKADDR_IN			sockAdr			= { };
@@ -92,8 +92,14 @@ struct alignas(64) Session
 
 	DWORD				timeoutTime		= 0;
 
-	RingBuffer			recvBuf{ MAX_BUF };
-	RingBuffer			sendBuf{ MAX_BUF };
+	RingBuffer			recvBuf{ MAX_BUF * 2 };
+	RingBuffer			sendBuf{ MAX_BUF * 2 };
+
+	atomic<bool>		sending = false;
+	atomic<bool>		recving = false;
+
+	IOContext			recvCtx{};
+	IOContext			sendCtx{};
 
 	JobQueue			jobQueue;
 
@@ -105,6 +111,16 @@ struct alignas(64) Session
 	alignas(64) DWORD	ioFlag			= 0;
 
 	Session() { InitializeSRWLock(&sl); }
+	virtual ~Session() {};
+	void Push(uint32_t header, vector<char>&& data)
+	{
+		PacketHeader h;
+		h.size = sizeof(PacketHeader) + data.size();
+		h.header = header;
+
+		sendBuf.TryPush(reinterpret_cast<const char*>(&h), sizeof(h));
+		sendBuf.TryPush(data.data(), data.size());
+	}
 };
 
 class SessionManager
@@ -146,29 +162,27 @@ public:
 
 class NetCore
 {
-	atomic<bool> isRunning = false;
-	SessionManager sm;
-
-	SOCKET listenSock;
-	SOCKADDR_IN listenAdr;
-
-	HANDLE hComPort;
-	LPFN_ACCEPTEX lpAcceptEx;
-	LPFN_GETACCEPTEXSOCKADDRS lpGetAcceptExSockaddrs;
-
-	CRITICAL_SECTION cs;
-	SRWLOCK sl;
-
-	vector<HANDLE> pool;
-
-	int acceptCount;
-private:
-	void LoadAcceptEx();
-	void PostAccept() const;
-	void OnAccept(AcceptContext* ctx);
 public:
+	atomic<bool> isRunning = false;
+	SessionManager sm {};
+
+	SOCKET listenSock = INVALID_SOCKET;
+	SOCKADDR_IN listenAdr{};
+
+	HANDLE hComPort = 0;
+	LPFN_ACCEPTEX lpAcceptEx{};
+	LPFN_GETACCEPTEXSOCKADDRS lpGetAcceptExSockaddrs{};
+
+	CRITICAL_SECTION cs{};
+	SRWLOCK sl{};
+
+	vector<HANDLE> pool{};
+
+	int acceptCount = 0;
+	NetCore() {}
 	void StartUp(string name, USHORT port, int count = 100);
-	void PostRecv(Session* session);
+	void PostRecv(Session* session) const;
+	void PostSend(Session* session) const;
 	void Parser(Session* session);
 
 	struct ThreadParam
@@ -179,8 +193,17 @@ public:
 	static unsigned __stdcall ThreadEntry(void* param);
 
 	unsigned __stdcall WorkerThread(HANDLE hComPort);
+
+
+	virtual ~NetCore() {}
+private:
+	void LoadAcceptEx();
+	void PostAccept() const;
+	void OnAccept(IOContext* ctx);
 protected:
+	virtual void OnRecv(IOContext* ctx, int byteTrans);
+	virtual void OnSend(IOContext* ctx);
+
 	virtual void Processing(JobQueue* jobQueue) = 0;
-	virtual void RegistAccept();
-	virtual void ProcessAccept();
+	virtual Session* CreateSession(SOCKET sock);
 };

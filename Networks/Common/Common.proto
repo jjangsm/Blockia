@@ -4,6 +4,7 @@ package Protocol;
 enum PACKET_HEADER
 {
 	PKT_UNKNOWN								= 0;
+	PKT_HANDSHAKE							= 1;
 	
 	//PKT_REQ_LOGIN
 	PKT_REQ_LOGIN							= 1001001;
