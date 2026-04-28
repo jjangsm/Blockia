@@ -3,9 +3,11 @@ using Google.Protobuf;
 using Protocol;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using UnityEngine;
@@ -100,15 +102,16 @@ public class NetCore : MonoBehaviour
     {
         TcpClient clnt = new(ip, port);
         sslStream = new(clnt.GetStream(), false, ValidateServerCertificate);
-
         await sslStream.AuthenticateAsClientAsync(ip);
 
         Debug.Log("Handshake Completed");
     }
-    private bool ValidateServerCertificate(object sender, X509Certificate certificate,
-        X509Chain chain, SslPolicyErrors sslPolicyErrors)
+    private bool ValidateServerCertificate(
+    object sender,
+    X509Certificate certificate,
+    X509Chain chain,
+    SslPolicyErrors sslPolicyErrors)
     {
-        //임시 true
         return true;
     }
 

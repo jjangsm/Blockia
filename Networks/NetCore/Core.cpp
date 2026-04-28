@@ -117,9 +117,9 @@ void NetCore::OnRecv(LPIOCONTEXT ctx, int byteTrans)
 
 void NetCore::OnSend(LPIOCONTEXT ctx)
 {
-	SRWExclusiveLock lock(ctx->owner->sl);
-	
 	Session* session = ctx->owner;
+
+	SRWExclusiveLock lock(session->sl);
 
 	session->contextPool.Release(ctx);
 

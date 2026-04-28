@@ -69,7 +69,13 @@ public:
 
 	void Release(LPIOCONTEXT ctx)
 	{
-		ZeroMemory(&ctx, sizeof(IOCONTEXT));
+		ctx->sock = INVALID_SOCKET;
+		ctx->owner = nullptr;
+		ctx->overlappedEx.wsaBuf.buf = nullptr;
+		ctx->overlappedEx.wsaBuf.len = 0;
+
+		ZeroMemory(&ctx->overlappedEx.overlapped, sizeof(OVERLAPPED));
+
 		pool.Push(ctx);
 	}
 } IOCONTEXT_POOL;
@@ -85,8 +91,8 @@ public:
 
 	DWORD				timeoutTime		= 0;
 
-	RingBuffer			recvBuf{ MAX_BUF * 2 };
-	RingBuffer			sendBuf{ MAX_BUF * 2 };
+	RingBuffer			recvBuf{ MAX_BUF << 1 };
+	RingBuffer			sendBuf{ MAX_BUF << 1 };
 
 	IOCONTEXT_POOL		contextPool{ MAX_CONTEXT_POOL_SIZE };
 
@@ -205,7 +211,7 @@ private:
 	void OnAccept(LPIOCONTEXT ctx);
 protected:
 	virtual void OnRecv(LPIOCONTEXT ctx, int byteTrans);
-	void OnSend(LPIOCONTEXT ctx);
+	virtual void OnSend(LPIOCONTEXT ctx);
 
 	virtual void Processing(Session* session) = 0;
 	virtual Session* CreateSession(SOCKET sock);

@@ -61,38 +61,40 @@ public:
 		
 		TLSSession* session = static_cast<TLSSession*>(ctx->owner);
 
-		LPIOCONTEXT cx = session->contextPool.Acquire();
-		cx->sock = session->sock;
-		cx->owner = session;
-
-		BIO_write(session->rbio, cx->overlappedEx.buf, byteTrans);
+		BIO_write(session->rbio, ctx->overlappedEx.buf, byteTrans);
 
 		if (!session->handshakeDone)
 		{
 			int ret = SSL_accept(session->ssl);
-			int err = SSL_get_error(session->ssl, ret);
 
 			vector<char> buf(MAX_BUF);
 
 			while (true)
 			{
 				int outLen = BIO_read(session->wbio, buf.data(), MAX_BUF);
-				if (outLen < 0) break;
+				if (outLen <= 0) break;
 
-				/*ZeroMemory(&session->sendCtx.overlappedEx.overlapped, sizeof(OVERLAPPED));
-				session->sendCtx.overlappedEx.ioType = IOType::WRITING;
-				session->sendCtx.overlappedEx.wsaBuf.buf = buf.data();
-				session->sendCtx.overlappedEx.wsaBuf.len = outLen;
+				LPIOCONTEXT cx = session->contextPool.Acquire();
+				cx->sock = session->sock;
+				cx->owner = session;
 
-				session->sending = true;
+				memcpy(cx->overlappedEx.buf, buf.data(), outLen);
 
-				WSASend(session->sock, &session->sendCtx.overlappedEx.wsaBuf, 1, NULL, 0,
-					&session->sendCtx.overlappedEx.overlapped, NULL);*/
+				ZeroMemory(&cx->overlappedEx.overlapped, sizeof(OVERLAPPED));
+				cx->overlappedEx.ioType = IOType::WRITING;
+
+				cx->overlappedEx.wsaBuf.buf = cx->overlappedEx.buf;
+				cx->overlappedEx.wsaBuf.len = outLen;
+
+				if (WSASend(cx->sock, &cx->overlappedEx.wsaBuf, 1, NULL, 0,
+					&cx->overlappedEx.overlapped, NULL) == SOCKET_ERROR) PRINT_LAST_WSA_EXCAPTION;
 			}
 
 			if (ret == 1) session->handshakeDone = true;
 			else
 			{
+				int err = SSL_get_error(session->ssl, ret);
+
 				if (err == SSL_ERROR_WANT_READ) PostRecv(session);
 				else if (err != SSL_ERROR_WANT_WRITE)
 				{
@@ -120,10 +122,21 @@ public:
 		{
 			ctx->owner->recvBuf.TryPush(ctx->overlappedEx.buf, byteTrans);
 			Parser(ctx->owner);
-			Processing(&ctx->owner->jobPool);
-			PostRecv(session);
+			Processing(ctx->owner);
+			PostRecv(ctx->owner);
 		}
 
+	}
+	void OnSend(LPIOCONTEXT ctx) override
+	{
+		TLSSession* session = static_cast<TLSSession*>(ctx->owner);
+
+		if (session->handshakeDone) NetCore::OnSend(ctx);
+		else
+		{
+			SRWExclusiveLock lock(session->sl);
+			session->contextPool.Release(ctx);
+		}
 	}
 	Session* CreateSession(SOCKET sock) override
 	{
