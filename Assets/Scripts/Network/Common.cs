@@ -25,32 +25,31 @@ namespace Protocol {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
             "CgxDb21tb24ucHJvdG8SCFByb3RvY29sIjcKCUxvZ2luRGF0YRIMCgRtYWls",
-            "GAEgASgJEgoKAmlkGAIgASgJEhAKCHBhc3N3b3JkGAMgASgJKvoICg1QQUNL",
-            "RVRfSEVBREVSEg8KC1BLVF9VTktOT1dOEAASEQoNUEtUX0hBTkRTSEFLRRAB",
-            "EhMKDVBLVF9SRVFfTE9HSU4QqYw9EhUKD1BLVF9SRVFfU0lHTl9VUBCRlD0S",
-            "GgoUUEtUX1JFUV9TSUdOX1VQX0FVVEgQkpQ9EhsKFVBLVF9SRVFfQUNDX1VQ",
-            "REFURV9JRBD5mz0SGwoVUEtUX1JFUV9BQ0NfVVBEQVRFX1BXEPqbPRIdChdQ",
-            "S1RfUkVRX0FDQ19VUERBVEVfQVVUSBD7mz0SHAoWUEtUX1JFUV9DTk5fTE9C",
-            "QllfU0VSVhDhoz0SGwoVUEtUX1JFUV9DTk5fR0FNRV9TRVJWEOKjPRIbChVQ",
-            "S1RfUkVRX0NOTl9DSEFUX1NFUlYQ46M9EhoKFFBLVF9SRVFfRENfQVVUSF9T",
-            "RVJWEMmrPRIbChVQS1RfUkVRX0RDX0xPQkJZX1NFUlYQyqs9EhoKFFBLVF9S",
-            "RVFfRENfR0FNRV9TRVJWEMurPRIaChRQS1RfUkVRX0RDX0NIQVRfU0VSVhDM",
-            "qz0SHAoWUEtUX0ZBSUxfTE9HSU5fVU5LTk9XThDJmUMSHQoXUEtUX0ZBSUxf",
-            "TE9HSU5fSU5WX01BSUwQyplDEhsKFVBLVF9GQUlMX0xPR0lOX0lOVl9JRBDL",
-            "mUMSGwoVUEtUX0ZBSUxfTE9HSU5fSU5WX1BXEMyZQxIYChJQS1RfRkFJTF9M",
-            "T0dJTl9CQU4QzZlDEh4KGFBLVF9GQUlMX1NJR05fVVBfVU5LTk9XThCxoUMS",
-            "HwoZUEtUX0ZBSUxfU0lHTl9VUF9JTlZfTUFJTBCyoUMSHwoZUEtUX0ZBSUxf",
-            "U0lHTl9VUF9NQUlMX0JBThCzoUMSHQoXUEtUX0ZBSUxfU0lHTl9VUF9EVVBf",
-            "SUQQtKFDEh0KF1BLVF9GQUlMX1NJR05fVVBfSU5WX1BXELWhQxIfChlQS1Rf",
-            "RkFJTF9TSUdOX1VQX0lOVl9BVVRIELahQxIcChZQS1RfRkFJTF9BQ0NfVVBE",
-            "QVRFX0lEEJmpQxIcChZQS1RfRkFJTF9BQ0NfVVBEQVRFX1BXEJqpQxIeChhQ",
-            "S1RfRkFJTF9BQ0NfVVBEQVRFX0FVVEgQm6lDEhwKFlBLVF9GQUlMX0NOTl9B",
-            "VVRIX1NFUlYQgbFDEh0KF1BLVF9GQUlMX0NOTl9MT0JCWV9TRVJWEIKxQxIc",
-            "ChZQS1RfRkFJTF9DTk5fR0FNRV9TRVJWEIOxQxIcChZQS1RfRkFJTF9DTk5f",
-            "Q0hBVF9TRVJWEISxQxITCg1QS1RfU1VDX0xPR0lOEOmmSRIVCg9QS1RfU1VD",
-            "X1NJR05fVVAQ0a5JEhgKElBLVF9TVUNfU0lHTl9VUF9JRBDSrkkSGAoSUEtU",
-            "X1NVQ19TSUdOX1VQX1BXENOuSRIaChRQS1RfU1VDX1NJR05fVVBfQVVUSBDU",
-            "rkkSGwoVUEtUX1NVQ19BQ0NfVVBEQVRFX0lEELm2SRIbChVQS1RfU1VDX0FD",
+            "GAEgASgJEgoKAmlkGAIgASgJEhAKCHBhc3N3b3JkGAMgASgJKs0ICg1QQUNL",
+            "RVRfSEVBREVSEg8KC1BLVF9VTktOT1dOEAASEwoNUEtUX1JFUV9MT0dJThCp",
+            "jD0SFQoPUEtUX1JFUV9TSUdOX1VQEJGUPRIaChRQS1RfUkVRX1NJR05fVVBf",
+            "QVVUSBCSlD0SHQoXUEtUX1JFUV9HTUFJTF9TRU5EX0FVVEgQ+Zs9Eh0KF1BL",
+            "VF9SRVFfQUNDX1VQREFURV9OQU1FEOGjPRIbChVQS1RfUkVRX0FDQ19VUERB",
+            "VEVfUFcQ4qM9EhwKFlBLVF9SRVFfQ05OX0xPQkJZX1NFUlYQyas9EhsKFVBL",
+            "VF9SRVFfQ05OX0dBTUVfU0VSVhDKqz0SGwoVUEtUX1JFUV9DTk5fQ0hBVF9T",
+            "RVJWEMurPRIaChRQS1RfUkVRX0RDX0FVVEhfU0VSVhCxsz0SGwoVUEtUX1JF",
+            "UV9EQ19MT0JCWV9TRVJWELKzPRIaChRQS1RfUkVRX0RDX0dBTUVfU0VSVhCz",
+            "sz0SGgoUUEtUX1JFUV9EQ19DSEFUX1NFUlYQtLM9EhwKFlBLVF9GQUlMX0xP",
+            "R0lOX1VOS05PV04QyZlDEh0KF1BLVF9GQUlMX0xPR0lOX0lOVl9NQUlMEMqZ",
+            "QxIbChVQS1RfRkFJTF9MT0dJTl9JTlZfSUQQy5lDEhsKFVBLVF9GQUlMX0xP",
+            "R0lOX0lOVl9QVxDMmUMSGAoSUEtUX0ZBSUxfTE9HSU5fQkFOEM2ZQxIeChhQ",
+            "S1RfRkFJTF9TSUdOX1VQX1VOS05PV04QsaFDEh8KGVBLVF9GQUlMX1NJR05f",
+            "VVBfSU5WX01BSUwQsqFDEh8KGVBLVF9GQUlMX1NJR05fVVBfTUFJTF9CQU4Q",
+            "s6FDEh0KF1BLVF9GQUlMX1NJR05fVVBfRFVQX0lEELShQxIdChdQS1RfRkFJ",
+            "TF9TSUdOX1VQX0lOVl9QVxC1oUMSHwoZUEtUX0ZBSUxfU0lHTl9VUF9JTlZf",
+            "QVVUSBC2oUMSHgoYUEtUX0ZBSUxfQUNDX1VQREFURV9OQU1FEJmpQxIcChZQ",
+            "S1RfRkFJTF9BQ0NfVVBEQVRFX1BXEJqpQxIcChZQS1RfRkFJTF9DTk5fQVVU",
+            "SF9TRVJWEIGxQxIdChdQS1RfRkFJTF9DTk5fTE9CQllfU0VSVhCCsUMSHAoW",
+            "UEtUX0ZBSUxfQ05OX0dBTUVfU0VSVhCDsUMSHAoWUEtUX0ZBSUxfQ05OX0NI",
+            "QVRfU0VSVhCEsUMSEwoNUEtUX1NVQ19MT0dJThDppkkSFQoPUEtUX1NVQ19T",
+            "SUdOX1VQENGuSRIYChJQS1RfU1VDX1NJR05fVVBfSUQQ0q5JEhgKElBLVF9T",
+            "VUNfU0lHTl9VUF9QVxDTrkkSGgoUUEtUX1NVQ19TSUdOX1VQX0FVVEgQ1K5J",
+            "Eh0KF1BLVF9TVUNfQUNDX1VQREFURV9OQU1FELm2SRIbChVQS1RfU1VDX0FD",
             "Q19VUERBVEVfUFcQurZJKh0KCkVSUk9SX0NPREUSDwoLRVJSX1VOS05PV04Q",
             "AGIGcHJvdG8z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
@@ -65,7 +64,6 @@ namespace Protocol {
   #region Enums
   public enum PACKET_HEADER {
     [pbr::OriginalName("PKT_UNKNOWN")] PktUnknown = 0,
-    [pbr::OriginalName("PKT_HANDSHAKE")] PktHandshake = 1,
     /// <summary>
     ///PKT_REQ_LOGIN
     /// </summary>
@@ -76,24 +74,27 @@ namespace Protocol {
     [pbr::OriginalName("PKT_REQ_SIGN_UP")] PktReqSignUp = 1002001,
     [pbr::OriginalName("PKT_REQ_SIGN_UP_AUTH")] PktReqSignUpAuth = 1002002,
     /// <summary>
+    ///PKT_REQ_GMAIL
+    /// </summary>
+    [pbr::OriginalName("PKT_REQ_GMAIL_SEND_AUTH")] PktReqGmailSendAuth = 1003001,
+    /// <summary>
     ///PKT_REQ_ACC_UPDATE
     /// </summary>
-    [pbr::OriginalName("PKT_REQ_ACC_UPDATE_ID")] PktReqAccUpdateId = 1003001,
-    [pbr::OriginalName("PKT_REQ_ACC_UPDATE_PW")] PktReqAccUpdatePw = 1003002,
-    [pbr::OriginalName("PKT_REQ_ACC_UPDATE_AUTH")] PktReqAccUpdateAuth = 1003003,
+    [pbr::OriginalName("PKT_REQ_ACC_UPDATE_NAME")] PktReqAccUpdateName = 1004001,
+    [pbr::OriginalName("PKT_REQ_ACC_UPDATE_PW")] PktReqAccUpdatePw = 1004002,
     /// <summary>
     ///PKT_REQ_CNN
     /// </summary>
-    [pbr::OriginalName("PKT_REQ_CNN_LOBBY_SERV")] PktReqCnnLobbyServ = 1004001,
-    [pbr::OriginalName("PKT_REQ_CNN_GAME_SERV")] PktReqCnnGameServ = 1004002,
-    [pbr::OriginalName("PKT_REQ_CNN_CHAT_SERV")] PktReqCnnChatServ = 1004003,
+    [pbr::OriginalName("PKT_REQ_CNN_LOBBY_SERV")] PktReqCnnLobbyServ = 1005001,
+    [pbr::OriginalName("PKT_REQ_CNN_GAME_SERV")] PktReqCnnGameServ = 1005002,
+    [pbr::OriginalName("PKT_REQ_CNN_CHAT_SERV")] PktReqCnnChatServ = 1005003,
     /// <summary>
     ///PKT_REQ_DC
     /// </summary>
-    [pbr::OriginalName("PKT_REQ_DC_AUTH_SERV")] PktReqDcAuthServ = 1005001,
-    [pbr::OriginalName("PKT_REQ_DC_LOBBY_SERV")] PktReqDcLobbyServ = 1005002,
-    [pbr::OriginalName("PKT_REQ_DC_GAME_SERV")] PktReqDcGameServ = 1005003,
-    [pbr::OriginalName("PKT_REQ_DC_CHAT_SERV")] PktReqDcChatServ = 1005004,
+    [pbr::OriginalName("PKT_REQ_DC_AUTH_SERV")] PktReqDcAuthServ = 1006001,
+    [pbr::OriginalName("PKT_REQ_DC_LOBBY_SERV")] PktReqDcLobbyServ = 1006002,
+    [pbr::OriginalName("PKT_REQ_DC_GAME_SERV")] PktReqDcGameServ = 1006003,
+    [pbr::OriginalName("PKT_REQ_DC_CHAT_SERV")] PktReqDcChatServ = 1006004,
     /// <summary>
     ///PKT_FAIL_LOGIN
     /// </summary>
@@ -114,9 +115,8 @@ namespace Protocol {
     /// <summary>
     ///PKT_FAIL_ACC_UPDATE
     /// </summary>
-    [pbr::OriginalName("PKT_FAIL_ACC_UPDATE_ID")] PktFailAccUpdateId = 1103001,
+    [pbr::OriginalName("PKT_FAIL_ACC_UPDATE_NAME")] PktFailAccUpdateName = 1103001,
     [pbr::OriginalName("PKT_FAIL_ACC_UPDATE_PW")] PktFailAccUpdatePw = 1103002,
-    [pbr::OriginalName("PKT_FAIL_ACC_UPDATE_AUTH")] PktFailAccUpdateAuth = 1103003,
     /// <summary>
     ///PKT_FAIL_CONNECT
     /// </summary>
@@ -138,7 +138,7 @@ namespace Protocol {
     /// <summary>
     ///PKT_SUC_ACC_UPDATE
     /// </summary>
-    [pbr::OriginalName("PKT_SUC_ACC_UPDATE_ID")] PktSucAccUpdateId = 1203001,
+    [pbr::OriginalName("PKT_SUC_ACC_UPDATE_NAME")] PktSucAccUpdateName = 1203001,
     [pbr::OriginalName("PKT_SUC_ACC_UPDATE_PW")] PktSucAccUpdatePw = 1203002,
   }
 

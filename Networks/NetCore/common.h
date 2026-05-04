@@ -4,15 +4,23 @@
 using namespace std;
 using namespace chrono;
 
+typedef class CSScopeLock			CSSPL;
+typedef class SRWSharedLock			SRWSL;
+typedef class SRWExclusiveLock		SRWEL;
 
-class ScopeLock
+typedef class RingBuffer			RBUF;
+
+class Initializable
+{
+	virtual void Init() = 0;
+};
+class CSScopeLock
 {
 private:
 	CRITICAL_SECTION& m_cs;
 public:
-	ScopeLock(CRITICAL_SECTION& cs) : m_cs(cs)
-	{ EnterCriticalSection(&m_cs); }
-	~ScopeLock() { LeaveCriticalSection(&m_cs); }
+	CSScopeLock(CRITICAL_SECTION& cs) : m_cs(cs) { EnterCriticalSection(&m_cs); }
+	~CSScopeLock() { LeaveCriticalSection(&m_cs); }
 };
 
 class SRWSharedLock
@@ -20,8 +28,7 @@ class SRWSharedLock
 private:
 	SRWLOCK& m_sl;
 public:
-	SRWSharedLock(SRWLOCK& sl) :m_sl(sl)
-	{ AcquireSRWLockShared(&m_sl); }
+	SRWSharedLock(SRWLOCK& sl) :m_sl(sl) { AcquireSRWLockShared(&m_sl); }
 	~SRWSharedLock() { ReleaseSRWLockShared(&m_sl); }
 };
 
@@ -30,8 +37,7 @@ class SRWExclusiveLock
 private:
 	SRWLOCK& m_sl;
 public:
-	SRWExclusiveLock(SRWLOCK& sl) :m_sl(sl)
-	{ AcquireSRWLockExclusive(&m_sl); }
+	SRWExclusiveLock(SRWLOCK& sl) :m_sl(sl) { AcquireSRWLockExclusive(&m_sl); }
 	~SRWExclusiveLock() { ReleaseSRWLockExclusive(&m_sl); }
 };
 
@@ -221,3 +227,4 @@ public:
 		return nullptr;
 	}
 };
+template<typename T> using LFPOOL = LockFreePool<T>;

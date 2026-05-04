@@ -17,22 +17,22 @@ public:
 	class TLSSession : public Session
 	{
 	public:
-		SSL* ssl = {};
-		BIO* rbio = {};
-		BIO* wbio = {};
+		SSL* ssl = nullptr;
+		BIO* rbio = nullptr;
+		BIO* wbio = nullptr;
 		bool handshakeDone = false;
 	};
 
-	void Processing(Session* session) override
+	void Processing(PSESSION session) override
 	{
 		while (!session->jobQueue.empty())
 		{
-			Job* job = session->jobQueue.front();
+			PJOB job = session->jobQueue.front();
 			session->jobQueue.pop();
 
 			switch (job->header)
 			{
-			case PKT_REQ_LOGIN:
+			case PKT_REQ_SIGN_UP:
 			{
 				LoginData login;
 				login.ParseFromString(job->data.data());
@@ -43,10 +43,10 @@ public:
 				break;
 			}
 			}
-			session->jobPool.Push(job);
+			session->jobPool.Release(job);
 		}
 	}
-	void OnRecv(IOContext* ctx, int byteTrans)
+	void OnRecv(PIOCONTEXT ctx, int byteTrans)
 	{
 		if (!ctx)
 		{
@@ -63,6 +63,8 @@ public:
 
 		BIO_write(session->rbio, ctx->overlappedEx.buf, byteTrans);
 
+		session->contextPool.Release(ctx);
+
 		if (!session->handshakeDone)
 		{
 			int ret = SSL_accept(session->ssl);
@@ -74,16 +76,10 @@ public:
 				int outLen = BIO_read(session->wbio, buf.data(), MAX_BUF);
 				if (outLen <= 0) break;
 
-				LPIOCONTEXT cx = session->contextPool.Acquire();
-				cx->sock = session->sock;
-				cx->owner = session;
+				PIOCONTEXT cx = session->contextPool.Acquire();
+				cx->Init(session, IO_WRITING);
 
 				memcpy(cx->overlappedEx.buf, buf.data(), outLen);
-
-				ZeroMemory(&cx->overlappedEx.overlapped, sizeof(OVERLAPPED));
-				cx->overlappedEx.ioType = IOType::WRITING;
-
-				cx->overlappedEx.wsaBuf.buf = cx->overlappedEx.buf;
 				cx->overlappedEx.wsaBuf.len = outLen;
 
 				if (WSASend(cx->sock, &cx->overlappedEx.wsaBuf, 1, NULL, 0,
@@ -120,14 +116,24 @@ public:
 		}
 		else
 		{
-			ctx->owner->recvBuf.TryPush(ctx->overlappedEx.buf, byteTrans);
-			Parser(ctx->owner);
-			Processing(ctx->owner);
-			PostRecv(ctx->owner);
+			PIOCONTEXT cx = session->contextPool.Acquire();
+			cx->Init(session);
+
+			while (true)
+			{
+				int ret = SSL_read(session->ssl, cx->overlappedEx.buf, MAX_BUF);
+				if (ret <= 0) break;
+
+				cx->owner->recvBuf.TryPush(cx->overlappedEx.buf, ret);
+			}
+
+			Parser(cx->owner);
+			Processing(cx->owner);
+			PostRecv(cx->owner);
 		}
 
 	}
-	void OnSend(LPIOCONTEXT ctx) override
+	void OnSend(PIOCONTEXT ctx) override
 	{
 		TLSSession* session = static_cast<TLSSession*>(ctx->owner);
 

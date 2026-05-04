@@ -3,11 +3,46 @@
 #include "Debug.h"
 #include <Common.pb.h>
 
-constexpr auto MAX_BUF =  4096;
+constexpr auto MAX_BUF = 4096;
 constexpr auto MAX_CONTEXT_POOL_SIZE = 8;
 constexpr auto MAX_JOB_POOL_SIZE = 16;
 
 using namespace Protocol;
+
+#define IO_ACCEPT IOType::ACCEPT
+#define IO_READING IOType::READING
+#define IO_WRITING IOType::WRITING
+
+typedef class Job					JOB,				* PJOB;
+typedef class Session				SESSION,			* PSESSION;
+typedef class OverlappedEx			OVERLAPPED_EX,		* POVERLAPPED_EX;
+typedef class IOContext				IOCONTEXT,			* PIOCONTEXT;
+
+template<typename T> class WrappedLockFreePool
+{
+	static_assert(is_base_of<Initializable, T>::value,
+		"T must derive from Initializable");
+private:
+	LFPOOL<T> pool{};
+public:
+	WrappedLockFreePool(size_t size)
+	{
+		for (int i = 0; i < size; i++) pool.Push(new T);
+	}
+
+	T* Acquire()
+	{
+		if (T* obj = pool.Pop()) return obj;
+		else return new T();
+	}
+
+	void Release(T* obj)
+	{
+		obj->Init();
+		pool.Push(obj);
+	}
+};
+template<typename T> using WLFPOOL = WrappedLockFreePool<T>;
 
 enum class IOType : uint8_t
 {
@@ -17,105 +52,99 @@ enum class IOType : uint8_t
 };
 
 #pragma pack(push, 1)
-struct PacketHeader
+typedef struct Header
 {
 	uint16_t size = 0;
 	uint32_t header = 0;
-};
+} HEADER;
 #pragma pack(pop)
 
-class Job
+class Job : public Initializable
 {
 public:
 	vector<char> data{};
 	uint32_t header = 0;
 public:
-	Job() = default;
+	Job() { Init(); }
+	void Init() override
+	{
+		ZeroMemory(&data, sizeof(vector<char>));
+		header = 0;
+	}
 
 	size_t Size() const noexcept { return data.size(); }
 };
 
-typedef struct OverlappedEx
+struct OverlappedEx
 {
 	OVERLAPPED overlapped{};
 	char buf[MAX_BUF]{};
 	WSABUF wsaBuf{};
-	IOType ioType = IOType::READING;
-} OVERLAPPED_EX, * LPOVERLAPPED_EX;
+	IOType ioType = IO_READING;
+};
 
-
-class Session;
-
-typedef struct IOContext
+class IOContext : public Initializable
 {
+public:
 	OVERLAPPED_EX overlappedEx{};
 	SOCKET sock = INVALID_SOCKET;
-	Session* owner = nullptr;
-} IOCONTEXT, *LPIOCONTEXT;
-
-typedef class IOContextPool
-{
-private:
-	LockFreePool<IOCONTEXT> pool{};
+	PSESSION owner = nullptr;
 public:
-	IOContextPool(size_t size)
-	{ for (int i = 0; i < size; i++) pool.Push(new IOCONTEXT); }
-
-	LPIOCONTEXT Acquire()
+	IOContext() { Init(); }
+	void Init() override
 	{
-		if (LPIOCONTEXT obj = pool.Pop()) return obj;
-		else return new IOCONTEXT();
+		ZeroMemory(&overlappedEx.overlapped, sizeof(OVERLAPPED));
+		ZeroMemory(&overlappedEx.buf, MAX_BUF);
+
+		overlappedEx.wsaBuf.len = 0;
+		overlappedEx.wsaBuf.buf = nullptr;
+
+		sock = INVALID_SOCKET;
+
+		owner = nullptr;
 	}
-
-	void Release(LPIOCONTEXT ctx)
-	{
-		ctx->sock = INVALID_SOCKET;
-		ctx->owner = nullptr;
-		ctx->overlappedEx.wsaBuf.buf = nullptr;
-		ctx->overlappedEx.wsaBuf.len = 0;
-
-		ZeroMemory(&ctx->overlappedEx.overlapped, sizeof(OVERLAPPED));
-
-		pool.Push(ctx);
-	}
-} IOCONTEXT_POOL;
+	void Init(PSESSION owner, IOType ioType = IO_READING);
+};
 
 class alignas(64) Session
 {
 public:
-	DWORD64				sessionID		= 0;
-	SOCKET				sock			= INVALID_SOCKET;
-	SOCKADDR_IN			sockAdr			= { };
-	DWORD				sockAdrIP		= 0;
-	USHORT				sockAdrPort		= 0;
+	DWORD64				sessionID = 0;
+	SOCKET				sock = INVALID_SOCKET;
+	SOCKADDR_IN			sockAdr = { };
+	DWORD				sockAdrIP = 0;
+	USHORT				sockAdrPort = 0;
 
-	DWORD				timeoutTime		= 0;
+	DWORD				timeoutTime = 0;
 
-	RingBuffer			recvBuf{ MAX_BUF << 1 };
-	RingBuffer			sendBuf{ MAX_BUF << 1 };
+	RBUF				recvBuf{ MAX_BUF << 1 };
+	RBUF				sendBuf{ MAX_BUF << 1 };
 
-	IOCONTEXT_POOL		contextPool{ MAX_CONTEXT_POOL_SIZE };
+	WLFPOOL<IOCONTEXT>	contextPool{ MAX_CONTEXT_POOL_SIZE };
 
-	LockFreePool<Job>	jobPool;
-	queue<Job*>			jobQueue;
+	WLFPOOL<JOB>		jobPool{ MAX_JOB_POOL_SIZE };
+	queue<PJOB>			jobQueue{};
 
-	SRWLOCK				sl;
+	SRWLOCK				sl{};
 
-	atomic<bool>		alive			= false;
+	atomic<bool>		alive = false;
 
-	alignas(64) DWORD	ioCount			= 0x80000000;
-	alignas(64) DWORD	ioFlag			= 0;
-
-	Session()
-	{ 
+	alignas(64) DWORD	ioCount = 0x80000000;
+	alignas(64) DWORD	ioFlag = 0;
+public:
+	Session() = default;
+	Session(SOCKET sock, DWORD64 id)
+	{
 		InitializeSRWLock(&sl);
-		for (int i = 0; i < MAX_JOB_POOL_SIZE; i++) jobPool.Push(new Job());
+		this->sock = sock;
+		this->sessionID = id;
+		this->alive = true;
 	}
 	virtual ~Session() {};
 	void Push(uint32_t header, vector<char>&& data)
 	{
-		PacketHeader h;
-		h.size = sizeof(PacketHeader) + data.size();
+		HEADER h;
+		h.size = sizeof(HEADER) + data.size();
 		h.header = header;
 
 		sendBuf.TryPush(reinterpret_cast<const char*>(&h), sizeof(h));
@@ -123,13 +152,27 @@ public:
 	}
 };
 
+inline void IOContext::Init(PSESSION owner, IOType ioType)
+{
+	ZeroMemory(&overlappedEx.overlapped, sizeof(OVERLAPPED));
+	ZeroMemory(&overlappedEx.buf, MAX_BUF);
+
+	this->sock = owner->sock;
+	this->owner = owner;
+
+	overlappedEx.ioType = ioType;
+
+	overlappedEx.wsaBuf.buf = overlappedEx.buf;
+	overlappedEx.wsaBuf.len = sizeof(overlappedEx.buf);
+}
+
 class SessionManager
 {
 private:
 	static constexpr DWORD64 sessionIdBase = 1000000000000001ULL;
 	atomic<DWORD64> nextSessionId;
 
-	unordered_map<DWORD64, Session*> sessions;
+	unordered_map<DWORD64, PSESSION> sessions;
 	mutex mtx;
 public:
 	SessionManager() : nextSessionId(sessionIdBase) {};
@@ -137,7 +180,7 @@ public:
 	DWORD64 GenerateSessionId()
 	{ return nextSessionId.fetch_add(1, memory_order_relaxed); }
 
-	void Emplace(Session* session)
+	void Emplace(PSESSION session)
 	{ sessions.emplace(session->sessionID, session); }
 
 	void RemoveSession(DWORD64 id)
@@ -151,7 +194,7 @@ public:
 			sessions.erase(it);
 		}
 	}
-	Session* GetSession(DWORD64 id)
+	PSESSION GetSession(DWORD64 id)
 	{
 		lock_guard<mutex> lock(mtx);
 
@@ -180,7 +223,7 @@ public:
 	CRITICAL_SECTION cs{};
 	SRWLOCK sl{};
 
-	vector<HANDLE> pool{};
+	vector<HANDLE> threadPool{};
 
 	int acceptCount = 0;
 public:
@@ -191,15 +234,15 @@ public:
 	}
 
 	void StartUp(string name, USHORT port, int count = 100);
-	void PostRecv(Session* session) const;
-	void PostSend(Session* session) const;
-	void Parser(Session* session);
+	void PostRecv(PSESSION session) const;
+	void PostSend(PSESSION session) const;
+	void Parser(PSESSION session);
 
-	struct ThreadParam
+	typedef struct ThreadParam
 	{
 		NetCore* self;
 		HANDLE hComPort;
-	};
+	} TPRAM, * PTPRAM;
 	static unsigned __stdcall ThreadEntry(void* param);
 
 	unsigned __stdcall WorkerThread(HANDLE hComPort);
@@ -208,11 +251,11 @@ public:
 private:
 	void LoadAcceptEx();
 	void PostAccept() const;
-	void OnAccept(LPIOCONTEXT ctx);
+	void OnAccept(PIOCONTEXT ctx);
 protected:
-	virtual void OnRecv(LPIOCONTEXT ctx, int byteTrans);
-	virtual void OnSend(LPIOCONTEXT ctx);
+	virtual void OnRecv(PIOCONTEXT ctx, int byteTrans);
+	virtual void OnSend(PIOCONTEXT ctx);
 
-	virtual void Processing(Session* session) = 0;
-	virtual Session* CreateSession(SOCKET sock);
+	virtual void Processing(PSESSION session) = 0;
+	virtual PSESSION CreateSession(SOCKET sock);
 };

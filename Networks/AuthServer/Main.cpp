@@ -1,4 +1,5 @@
 #include "Network.h"
+#include "Gmail.h"
 
 int main()
 {
@@ -7,6 +8,7 @@ int main()
 	TLS::InitTLS();
 
 	core->StartUp("Gateway Server", 8080, 100);
+	TestSend();
 
 	while (true)
 	{

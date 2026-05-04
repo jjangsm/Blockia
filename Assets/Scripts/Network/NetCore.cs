@@ -2,6 +2,7 @@ using Cysharp.Threading.Tasks;
 using Google.Protobuf;
 using Protocol;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -14,6 +15,7 @@ using UnityEngine;
 
 public class NetCore : MonoBehaviour
 {
+    public static NetCore Instance = null;
     [Header("Server Info")]
     public string ip = "127.0.0.1";
     public int port = 8080;
@@ -27,7 +29,27 @@ public class NetCore : MonoBehaviour
     public bool send = false;
 
     private readonly List<Socket> clients = new();
+    private ConcurrentQueue<byte[]> PendingQueue { get; set; } = new();
+    public void Enqueue(byte[] data) => PendingQueue.Enqueue(data);
+    private async UniTask SendTcp()
+    {
+        await UniTask.SwitchToThreadPool();
 
+        while (true)
+        {
+            if (PendingQueue.Count > 0)
+            {
+                if (PendingQueue.TryDequeue(out var packet))
+                {
+                    await sslStream.WriteAsync(packet, 0, packet.Length);
+                    Debug.Log(packet.Length);
+                }
+                await sslStream.FlushAsync();
+            }
+
+            await UniTask.Yield();
+        }
+    }
     async UniTask ConnectClientsAsync()
     {
         for (int i = 0; i < clientCount; i++)
@@ -92,10 +114,15 @@ public class NetCore : MonoBehaviour
         sock.Close();
     }
 
+    private void Awake()
+    {
+        Instance = this;
+    }
     async void Start()
     {
         //ConnectClientsAsync().Forget();
         await SslConnect();
+        SendTcp().Forget();
     }
     private SslStream sslStream = null;
     private async UniTask SslConnect()

@@ -61,7 +61,6 @@ const char* Debug::get_time()
 {
 	static string str;
 
-
 	auto now = system_clock::now();
 
 	auto seconds = system_clock::to_time_t(now);

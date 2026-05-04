@@ -11,8 +11,6 @@ void TLS::InitTLS()
 	SSL_CTX_set_min_proto_version(g_ctx, TLS1_2_VERSION);
 	SSL_CTX_set_max_proto_version(g_ctx, TLS1_2_VERSION);
 
-	SSL_CTX_set_cipher_list(g_ctx, "ECDHE-RSA-AES128-GCM-SHA256:AES128-SHA");
-
 	if (SSL_CTX_use_certificate_file(g_ctx, "server.crt", SSL_FILETYPE_PEM) <= 0)
 	{
 		GetOpenSSLError();
