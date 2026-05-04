@@ -46,7 +46,7 @@ void TestSend() {
         upload_status upload_ctx = { 0 };
 
         curl_easy_setopt(curl, CURLOPT_USERNAME, "Blockia.server@gmail.com");
-        curl_easy_setopt(curl, CURLOPT_PASSWORD, "wahx vkfh uvdg qcln");
+        curl_easy_setopt(curl, CURLOPT_PASSWORD, "PASSWORD");
 
         curl_easy_setopt(curl, CURLOPT_URL, "smtp://smtp.gmail.com:587");
 
@@ -54,7 +54,7 @@ void TestSend() {
 
         curl_easy_setopt(curl, CURLOPT_MAIL_FROM, "<Blockia.server@gmail.com>");
 
-        recipients = curl_slist_append(recipients, "<jsm070628@gmail.com>");
+        recipients = curl_slist_append(recipients, "<MAIL>");
         curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
 
         curl_easy_setopt(curl, CURLOPT_READFUNCTION, payload_source);
